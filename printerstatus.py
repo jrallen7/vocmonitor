@@ -4,6 +4,7 @@ import tomllib
 import sys
 import os
 from time import sleep
+import datetime
 
 # external libraries
 import memcache
@@ -30,6 +31,7 @@ def bambu_status_callback(statusmsg):
     if statusmsg.mc_percent is not None:
         shared.set('printpct', statusmsg.mc_percent)
 
+    print(datetime.datetime.now().astimezone().isoformat(timespec='seconds'), end=' ')
     print(f'Nozzle: {shared.get("temp_hotend"):.1f} / {shared.get("temp_hotend_tgt"):.1f} ' + \
           f'Bed: {shared.get("temp_bed"):.1f} / {shared.get("temp_bed_tgt"):.1f} ' + \
           f'Status: {shared.get("status")} {shared.get("printpct")} ')

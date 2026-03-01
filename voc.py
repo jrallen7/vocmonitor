@@ -6,10 +6,12 @@ from time import sleep
 
 # external libraries
 from PIL import Image, ImageDraw, ImageFont
-from bambu_connect import BambuClient
 from kasa import Discover
 import adafruit_sht4x, adafruit_sgp40, adafruit_ssd1306
 from adafruit_sgp40.voc_algorithm import VOCAlgorithm
+import memcache
+
+shared = memcache.Client(['127.0.0.1:11211'], debug=0)
 
 
 class TempSensor:
@@ -123,47 +125,29 @@ async def update(now):
     if now.second % 5 == 0:
         if vocindex > 150:
             await kasaswitch.turn_on()
-            globalstatus['filter'] = 1
+            shared.set('filter', 1)
         else:
             await kasaswitch.turn_off()
-            globalstatus['filter'] = 0
+            shared.set('filter', 0)
 
     timedatestring = now.astimezone().isoformat(timespec='milliseconds')
     tempstring = f'T {tempc:.1f} RH {rh:.1f}'
     vocstring = f'V {vocraw} {vocindex}'
-    filterstring = f'F {globalstatus["filter"]}'
-    #printerstring = f'P {globalstatus["tempbed"]} {globalstatus["temphotend"]}'
-    printerstring = f'P {globalstatus["temphotend"]} {globalstatus["temphotendsetpoint"]} ' + \
-          f'{globalstatus["tempbed"]} {globalstatus["tempbedsetpoint"]} ' + \
-          f'{globalstatus["status"]} {globalstatus["printpct"]}'
+    filterstring = f'F {shared.get("filter")}'
+    #printerstring = f'P {shared.get("temp_bed")} {shared.get("temphotend")}'
+    printerstring = f'P {shared.get("temp_hotend"):.1f} {shared.get("temp_hotend_tgt"):.1f} ' + \
+            f'{shared.get("temp_bed"):.1f} {shared.get("temp_bed_tgt"):.1f} ' + \
+          f'{shared.get("status")} {shared.get("printpct")}'
     logstring = ' '.join([timedatestring, tempstring, vocstring, filterstring, printerstring])
     print(logstring)
     with open(os.path.join(os.getcwd(), 'logs', now.strftime('%Y-%m-%d.log')), 'at') as fo:
         fo.write(f'{logstring}\n')
 
-def bambu_status_callback(statusmsg):
-    globalstatus['temphotend'] = statusmsg.nozzle_temper
-    globalstatus['temphotendsetpoint'] = statusmsg.nozzle_target_temper
-    globalstatus['tempbed'] = statusmsg.bed_temper
-    globalstatus['tempbedsetpoint'] = statusmsg.bed_target_temper
-    globalstatus['status'] = statusmsg.mc_print_stage
-    globalstatus['printpct'] = statusmsg.mc_percent
-    print(f'Bambu {globalstatus["temphotend"]} {globalstatus["temphotendsetpoint"]} ' +
-          f'{globalstatus["tempbed"]} {globalstatus["tempbedsetpoint"]} ' +
-          f'{globalstatus["status"]} {globalstatus["printpct"]}')
 
-def bambu_connect_callback():
-    print('Connecting to Bambu...')
-    bambu_client.dump_info()
 
 
 async def main():
-    global kasaswitch, tempsensor, vocsensor, display, globalstatus, bambu_client
-
-    globalstatus = {'filter':None,
-              'tempbed':None, 'temphotend':None,
-              'tempbedsetpoint':None, 'temphotendsetpoint':None,
-              'status':None, 'printpct':None}
+    global kasaswitch, tempsensor, vocsensor, display, bambu_client
 
     with open ('.vocconfig.toml', 'rb') as f:
         configdata = tomllib.load(f)
@@ -179,12 +163,8 @@ async def main():
                                                 password=configdata['kasa']['pass'])
     await kasaswitch.update()
     await kasaswitch.turn_off()
-    globalstatus['filter'] = 0
+    shared.set('filter', 0)
 
-    bambu_client = BambuClient(configdata['bambu']['hostname'],
-                           configdata['bambu']['access_code'],
-                           configdata['bambu']['serial'])
-    bambu_client.start_watch_client(bambu_status_callback, bambu_connect_callback)
     while True:
         if os.path.exists('vocstop'):
             break
@@ -194,7 +174,7 @@ async def main():
         tpostupdate = datetime.datetime.now()
 
         dtime = 1.0 - (tpostupdate - tpreupdate).total_seconds()
-        await asyncio.sleep(dtime)
+        sleep(dtime)
 
     print('Shutting down...')
     print('Turning off Kasa switch')
