@@ -1,0 +1,3 @@
+#!/usr/bin/bash
+
+screen -dmS bambu ./printerstatus.py

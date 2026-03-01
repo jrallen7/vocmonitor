@@ -132,8 +132,11 @@ async def update(now):
     tempstring = f'T {tempc:.1f} RH {rh:.1f}'
     vocstring = f'V {vocraw} {vocindex}'
     filterstring = f'F {globalstatus["filter"]}'
-    printerstring = f'P {globalstatus["tempbed"]} {globalstatus["temphotend"]}'
-    logstring = ' '.join([timedatestring, tempstring, vocstring, filterstring])
+    #printerstring = f'P {globalstatus["tempbed"]} {globalstatus["temphotend"]}'
+    printerstring = f'P {globalstatus["temphotend"]} {globalstatus["temphotendsetpoint"]} ' + \
+          f'{globalstatus["tempbed"]} {globalstatus["tempbedsetpoint"]} ' + \
+          f'{globalstatus["status"]} {globalstatus["printpct"]}'
+    logstring = ' '.join([timedatestring, tempstring, vocstring, filterstring, printerstring])
     print(logstring)
     with open(os.path.join(os.getcwd(), 'logs', now.strftime('%Y-%m-%d.log')), 'at') as fo:
         fo.write(f'{logstring}\n')
@@ -149,8 +152,13 @@ def bambu_status_callback(statusmsg):
           f'{globalstatus["tempbed"]} {globalstatus["tempbedsetpoint"]} ' +
           f'{globalstatus["status"]} {globalstatus["printpct"]}')
 
+def bambu_connect_callback():
+    print('Connecting to Bambu...')
+    bambu_client.dump_info()
+
+
 async def main():
-    global kasaswitch, tempsensor, vocsensor, display, globalstatus
+    global kasaswitch, tempsensor, vocsensor, display, globalstatus, bambu_client
 
     globalstatus = {'filter':None,
               'tempbed':None, 'temphotend':None,
@@ -176,7 +184,7 @@ async def main():
     bambu_client = BambuClient(configdata['bambu']['hostname'],
                            configdata['bambu']['access_code'],
                            configdata['bambu']['serial'])
-    bambu_client.start_watch_client(bambu_status_callback)
+    bambu_client.start_watch_client(bambu_status_callback, bambu_connect_callback)
     while True:
         if os.path.exists('vocstop'):
             break
