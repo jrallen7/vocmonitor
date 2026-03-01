@@ -13,6 +13,7 @@ import memcache
 
 shared = memcache.Client(['127.0.0.1:11211'], debug=0)
 
+import sys
 
 class TempSensor:
     def __init__(self, i2c):
@@ -110,7 +111,7 @@ class Display:
             self._disp.show()
 
 
-async def update(now):
+def update(now):
     tempc, rh = tempsensor.measure()
     vocraw, vocindex = vocsensor.measure(tempc, rh)
 
@@ -124,17 +125,16 @@ async def update(now):
     #Turn filter on if VOC high, only check every 5 seconds
     if now.second % 5 == 0:
         if vocindex > 150:
-            await kasaswitch.turn_on()
+            asyncioloop.run_until_complete(kasaswitch.turn_on())
             shared.set('filter', 1)
         else:
-            await kasaswitch.turn_off()
+            asyncioloop.run_until_complete(kasaswitch.turn_off())
             shared.set('filter', 0)
 
     timedatestring = now.astimezone().isoformat(timespec='milliseconds')
     tempstring = f'T {tempc:.1f} RH {rh:.1f}'
     vocstring = f'V {vocraw} {vocindex}'
     filterstring = f'F {shared.get("filter")}'
-    #printerstring = f'P {shared.get("temp_bed")} {shared.get("temphotend")}'
     printerstring = f'P {shared.get("temp_hotend"):.1f} {shared.get("temp_hotend_tgt"):.1f} ' + \
             f'{shared.get("temp_bed"):.1f} {shared.get("temp_bed_tgt"):.1f} ' + \
           f'{shared.get("status")} {shared.get("printpct")}'
@@ -146,8 +146,9 @@ async def update(now):
 
 
 
-async def main():
-    global kasaswitch, tempsensor, vocsensor, display, bambu_client
+if __name__ == '__main__':
+#async def main():
+    #global kasaswitch, tempsensor, vocsensor, display, bambu_client
 
     with open ('.vocconfig.toml', 'rb') as f:
         configdata = tomllib.load(f)
@@ -158,19 +159,26 @@ async def main():
     vocsensor = VOCSensor(i2c)
     display = Display(i2c)
 
-    kasaswitch = await Discover.discover_single(host=configdata['kasa']['ip'],
+    try:
+        asyncioloop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncioloop = asyncio.new_event_loop()
+    asyncio.set_event_loop(asyncioloop)
+
+    kasaswitch = asyncioloop.run_until_complete(Discover.discover_single(host=configdata['kasa']['ip'],
                                                 username=configdata['kasa']['id'],
-                                                password=configdata['kasa']['pass'])
-    await kasaswitch.update()
-    await kasaswitch.turn_off()
+                                                password=configdata['kasa']['pass']))
+    asyncioloop.run_until_complete(kasaswitch.update())
+    asyncioloop.run_until_complete(kasaswitch.turn_off())
     shared.set('filter', 0)
+
 
     while True:
         if os.path.exists('vocstop'):
             break
 
         tpreupdate = datetime.datetime.now()
-        await update(tpreupdate)
+        update(tpreupdate)
         tpostupdate = datetime.datetime.now()
 
         dtime = 1.0 - (tpostupdate - tpreupdate).total_seconds()
@@ -178,10 +186,9 @@ async def main():
 
     print('Shutting down...')
     print('Turning off Kasa switch')
-    await kasaswitch.turn_off()
-    await kasaswitch.disconnect()
+    asyncioloop.run_until_complete(kasaswitch.turn_off())
+    asyncioloop.run_until_complete(kasaswitch.disconnect())
     os.remove('vocstop')
 
 
-if __name__ == '__main__':
-    asyncio.run(main())
+    #asyncio.run(main())
