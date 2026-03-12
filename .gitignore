@@ -1,3 +1,3 @@
-.vocconfig.toml
+config.toml
 logs/**
 ztest/**

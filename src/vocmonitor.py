@@ -1,16 +1,20 @@
 #!/home/jrallen/adafruit/bin/python3
 
-# builtins
-import board, datetime, os, tomllib, asyncio
+import asyncio
+import datetime
+import os
 import sys
+import tomllib
 from time import sleep, time
 
-# external libraries
+import adafruit_sgp40
+import adafruit_sht4x
+import adafruit_ssd1306
+import board
 import memcache
-import adafruit_sht4x, adafruit_sgp40, adafruit_ssd1306
 from adafruit_sgp40.voc_algorithm import VOCAlgorithm
-from PIL import Image, ImageDraw, ImageFont
 from kasa import Discover
+from PIL import Image, ImageDraw, ImageFont
 
 
 class TempSensor:
@@ -172,14 +176,14 @@ def update(now):
     )
     print(logstring)
     with open(
-        os.path.join(sys.path[0], "logs", now.strftime("%Y-%m-%d.log")), "at"
+        os.path.join(sys.path[0], "..", "logs", now.strftime("%Y-%m-%d.log")), "at"
     ) as fo:
         fo.write(f"{logstring}\n")
 
 
 if __name__ == "__main__":
 
-    with open(os.path.join(sys.path[0], ".vocconfig.toml"), "rb") as f:
+    with open(os.path.join(sys.path[0], '..', "config.toml"), "rb") as f:
         configdata = tomllib.load(f)
 
     shared = memcache.Client([configdata["memcache"]["ip"]], debug=0)

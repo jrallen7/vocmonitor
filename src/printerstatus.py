@@ -1,17 +1,16 @@
 #!/home/jrallen/adafruit/bin/python3
 
-import tomllib
-import sys
-import os
-from time import sleep
 import datetime
+import os
+import sys
+import tomllib
+from time import sleep
 
-# external libraries
 import memcache
 
-# need to have the latest version of bambu-connect
-# from github; the pip version doesn't have the latest bug fixes
-sys.path.append(os.path.abspath("/home/jrallen/bambu-connect"))
+# need to have the latest version of bambu-connect from github;
+# the pip version doesn't have the latest bug fixes
+sys.path.append(os.path.expanduser("~/bambu-connect"))
 from bambu_connect import BambuClient
 
 
@@ -41,11 +40,11 @@ def bambu_status_callback(statusmsg):
 
 
 def bambu_connect_callback():
-    print("Connecting to Bambu...")
+    print("Connecting to Printer")
 
 
 if __name__ == "__main__":
-    with open(os.path.join(sys.path[0], ".vocconfig.toml"), "rb") as f:
+    with open(os.path.join(sys.path[0],'..', "config.toml"), "rb") as f:
         configdata = tomllib.load(f)
 
     shared = memcache.Client([configdata["memcache"]["ip"]], debug=0)
@@ -56,7 +55,7 @@ if __name__ == "__main__":
     shared.set("status", 0)
     shared.set("printpct", 0)
     try:
-        print("Connecting Bambu Client")
+        print("Starting Bambu Client")
         bambu_client = BambuClient(
             configdata["bambu"]["hostname"],
             configdata["bambu"]["access_code"],
@@ -65,9 +64,9 @@ if __name__ == "__main__":
         bambu_client.start_watch_client(bambu_status_callback, bambu_connect_callback)
 
         while True:
-            sleep(0.5)
+            sleep(0.1)
     except KeyboardInterrupt:
         pass
     finally:
-        print("Closing Bambu Watch Client")
+        print("Closing Bambu Client")
         bambu_client.stop_watch_client()
