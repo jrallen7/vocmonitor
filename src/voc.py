@@ -212,8 +212,6 @@ if __name__ == "__main__":
             tpreupdate = time()
 
             now = datetime.datetime.now()
-            if os.path.exists(os.path.join(sys.path[0], "vocstop")):
-                break
 
             update(now)
             # tpostupdate = datetime.datetime.now()
@@ -232,5 +230,3 @@ if __name__ == "__main__":
         asyncioloop.run_until_complete(kasaswitch.disconnect())
         print("Display: Clearing")
         display.clear()
-        if os.path.exists(os.path.join(sys.path[0], "vocstop")):
-            os.remove(os.path.join(sys.path[0], "vocstop"))
