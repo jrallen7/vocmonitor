@@ -167,23 +167,23 @@ def update(now):
     vocstring = f"V {vocraw} {vocindex}"
     filterstring = f'F {shared.get("filter")}'
     printerstring = (
-        f'P {shared.get("temp_hotend"):.1f} {shared.get("temp_hotend_tgt"):.1f} '
-        + f'{shared.get("temp_bed"):.1f} {shared.get("temp_bed_tgt"):.1f} '
-        + f'{shared.get("status")} {shared.get("printpct")}'
+        f"P {shared.get('temp_hotend'):.1f} {shared.get('temp_hotend_tgt'):.1f} "
+        + f"{shared.get('temp_bed'):.1f} {shared.get('temp_bed_tgt'):.1f} "
+        + f"{shared.get('status')} {shared.get('printpct')}"
     )
     logstring = " ".join(
         [timedatestring, tempstring, vocstring, filterstring, printerstring]
     )
     print(logstring)
-    with open(
-        os.path.join(sys.path[0], "..", "logs", now.strftime("%Y-%m-%d.log")), "at"
-    ) as fo:
+    with open(os.path.join(pathlogs, now.strftime("%Y-%m-%d.log")), "at") as fo:
         fo.write(f"{logstring}\n")
 
 
 if __name__ == "__main__":
+    pathroot = os.path.normpath(os.path.join(sys.path[0], ".."))
+    pathlogs = os.path.join(pathroot, "logs")
 
-    with open(os.path.join(sys.path[0], '..', "config.toml"), "rb") as f:
+    with open(os.path.join(pathroot, "config.toml"), "rb") as f:
         configdata = tomllib.load(f)
 
     shared = memcache.Client([configdata["memcache"]["ip"]], debug=0)
@@ -200,16 +200,14 @@ if __name__ == "__main__":
     display = Display(i2c)
     kasaswitch = asyncioloop.run_until_complete(
         Discover.discover_single(
-            host=configdata["kasa"]["ip"],
-            username=configdata["kasa"]["id"],
-            password=configdata["kasa"]["pass"],
+            host=configdata["kasa"]["host"],
+            username=configdata["kasa"]["username"],
+            password=configdata["kasa"]["password"],
         )
     )
     asyncioloop.run_until_complete(kasaswitch.update())
     asyncioloop.run_until_complete(kasaswitch.turn_off())
     shared.set("filter", 0)
-
-    logpath = os.path.join(sys.path[0], "logs")
 
     try:
         while True:

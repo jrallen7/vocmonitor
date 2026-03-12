@@ -1,7 +1,7 @@
 [kasa]
-ip = "192.168.1.100"
-id = "email@email.com"
-pass = "password"
+host = "192.168.1.100"
+username = "email@email.com"
+password = "password"
 
 [bambu]
 hostname = "192.168.1.101"
