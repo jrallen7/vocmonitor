@@ -1,12 +1,14 @@
 #!/home/jrallen/adafruit/bin/python3
 
+import argparse
 import datetime
 import os
 import sys
 import tomllib
 from time import sleep
 
-import memcache
+from pymemcache import serde
+from pymemcache.client.base import Client
 
 # need to have the latest version of bambu-connect from github;
 # the pip version doesn't have the latest bug fixes
@@ -15,28 +17,23 @@ from bambu_connect import BambuClient
 
 
 def bambu_status_callback(statusmsg):
-    if statusmsg.nozzle_target_temper is not None:
-        shared.set("temp_hotend_tgt", statusmsg.nozzle_target_temper)
-    if statusmsg.nozzle_temper is not None:
-        shared.set("temp_hotend", statusmsg.nozzle_temper)
+    status_data = {f: statusmsg.__getattribute__(f) for f in bambu_fields}
+    sharedcache.set_multi({k: v for k, v in status_data.items() if v is not None})
 
-    if statusmsg.bed_target_temper is not None:
-        shared.set("temp_bed_tgt", statusmsg.bed_target_temper)
-    if statusmsg.bed_temper is not None:
-        shared.set("temp_bed", statusmsg.bed_temper)
+    cache_data = sharedcache.get_multi(bambu_fields)
 
-    if statusmsg.mc_print_stage is not None:
-        shared.set("status", statusmsg.mc_print_stage)
-    if statusmsg.mc_percent is not None:
-        shared.set("printpct", statusmsg.mc_percent)
-
-    print(datetime.datetime.now().astimezone().isoformat(timespec="seconds"), end=" ")
     print(
-        f'Nozzle: {shared.get("temp_hotend"):.1f} / {shared.get("temp_hotend_tgt"):.1f} '
-        + f'Bed: {shared.get("temp_bed"):.1f} / {shared.get("temp_bed_tgt"):.1f} '
-        + f'Status: {shared.get("status")} {shared.get("printpct")} '
+        " ".join(
+            [
+                datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+                "Nozzle: {nozzle_temper:.1f} ({nozzle_target_temper:.1f})",
+                "Bed: {bed_temper:.1f} ({bed_target_temper:.1f})",
+                "Status: {mc_print_stage} {mc_percent}",
+            ]
+        ).format(**cache_data)
     )
-    # print(statusmsg)
+    # with open('msgdump.txt', 'at') as ftemp:
+    #    ftemp.write('{}\n\n'.format(statusmsg))
 
 
 def bambu_connect_callback():
@@ -44,23 +41,32 @@ def bambu_connect_callback():
 
 
 if __name__ == "__main__":
-    with open(os.path.join(sys.path[0],'..', "config.toml"), "rb") as f:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--flush", action="store_true")
+    args = parser.parse_args()
+
+    with open(os.path.join(sys.path[0], "..", "config.toml"), "rb") as f:
         configdata = tomllib.load(f)
 
-    shared = memcache.Client([configdata["memcache"]["ip"]], debug=0)
-    shared.set("temp_hotend", 0)
-    shared.set("temp_hotend_tgt", 0)
-    shared.set("temp_bed", 0)
-    shared.set("temp_bed_tgt", 0)
-    shared.set("status", 0)
-    shared.set("printpct", 0)
+    bambu_fields = [
+        "nozzle_target_temper",
+        "nozzle_temper",
+        "bed_target_temper",
+        "bed_temper",
+        "mc_print_stage",
+        "mc_percent",
+    ]
+    sharedcache = Client(serde=serde.pickle_serde, **configdata["memcache"])
+    if args.flush:
+        sharedcache.flush_all()
+    _ = sharedcache.get_multi(bambu_fields)
+    for f in bambu_fields:
+        if f not in _:
+            shared.set(f, 0)
+
     try:
         print("Starting Bambu Client")
-        bambu_client = BambuClient(
-            configdata["bambu"]["hostname"],
-            configdata["bambu"]["access_code"],
-            configdata["bambu"]["serial"],
-        )
+        bambu_client = BambuClient(**configdata["bambu"])
         bambu_client.start_watch_client(bambu_status_callback, bambu_connect_callback)
 
         while True:
