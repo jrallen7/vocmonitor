@@ -33,7 +33,7 @@ def callback_status(statusmsg):
                 timestamp,
                 "Hotend: {nozzle_temper:.1f} ({nozzle_target_temper:.1f})",
                 "Bed: {bed_temper:.1f} ({bed_target_temper:.1f})",
-                "Status: {mc_print_stage} {mc_percent}",
+                "Status: {mc_print_stage} {mc_percent} {layer_num} {total_layer_num}",
             ]
         ).format(**cachedata)
     )
@@ -75,6 +75,7 @@ if __name__ == "__main__":
     for f in bambu_fields:
         if f not in temp:
             client_cache.set(f, 0)
+    client_cache.set('bambu_fields', bambu_fields)
 
     # main loop
     try:

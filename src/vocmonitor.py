@@ -11,10 +11,11 @@ import adafruit_sgp40
 import adafruit_sht4x
 import adafruit_ssd1306
 import board
-import memcache
 from adafruit_sgp40.voc_algorithm import VOCAlgorithm
 from kasa import Discover
 from PIL import Image, ImageDraw, ImageFont
+from pymemcache import serde
+from pymemcache.client.base import Client
 
 
 class TempSensor:
@@ -146,31 +147,32 @@ def update(now):
     vocraw, vocindex = vocsensor.measure(tempc, rh)
 
     # Display only on for 2 out of 10 seconds to prevent aging
-    if now.second % 10 < 2:
-        display.enabled = True
-    else:
-        display.enabled = False
+    display.enabled = (now.second % 10 < 2)
     display.writedata(tempc, rh, vocraw, vocindex)
 
     # Turn filter on if VOC high, only check every 5 seconds
     if now.second % 5 == 0:
-        filteron = shared.get("filter")
+        filteron = client_cache.get("filter")
         if vocindex >= 150 and filteron == 0:
             asyncioloop.run_until_complete(kasaswitch.turn_on())
-            shared.set("filter", 1)
+            client_cache.set("filter", 1)
         elif vocindex < 150 and filteron == 1:
             asyncioloop.run_until_complete(kasaswitch.turn_off())
-            shared.set("filter", 0)
+            client_cache.set("filter", 0)
+
+    # get cache data
+    cachedata = client_cache.get_multi(bambu_fields+["filter"])
 
     timedatestring = now.astimezone().isoformat(timespec="milliseconds")
     tempstring = f"T {tempc:.1f} RH {rh:.1f}"
     vocstring = f"V {vocraw} {vocindex}"
-    filterstring = f'F {shared.get("filter")}'
-    printerstring = (
-        f"P {shared.get('temp_hotend'):.1f} {shared.get('temp_hotend_tgt'):.1f} "
-        + f"{shared.get('temp_bed'):.1f} {shared.get('temp_bed_tgt'):.1f} "
-        + f"{shared.get('status')} {shared.get('printpct')}"
-    )
+    filterstring = 'F {filter}'.format(**cachedata)
+    printerstring =" ".join(["P",
+        "{nozzle_temper:.1f} {nozzle_target_temper:.1f}",
+        "{bed_temper:.1f} {bed_target_temper:.1f}",
+        "{mc_print_stage} {mc_percent}",
+                             ]
+    ).format(**cachedata)
     logstring = " ".join(
         [timedatestring, tempstring, vocstring, filterstring, printerstring]
     )
@@ -186,7 +188,9 @@ if __name__ == "__main__":
     with open(os.path.join(pathroot, "config.toml"), "rb") as f:
         configdata = tomllib.load(f)
 
-    shared = memcache.Client([configdata["memcache"]["ip"]], debug=0)
+    client_cache = Client(serde=serde.pickle_serde, **configdata["memcache"])
+    bambu_fields = client_cache.get('bambu_fields')
+
     try:
         asyncioloop = asyncio.get_running_loop()
     except RuntimeError:
@@ -194,31 +198,23 @@ if __name__ == "__main__":
     asyncio.set_event_loop(asyncioloop)
 
     # initialize devices
-    i2c = board.I2C()
-    tempsensor = TempSensor(i2c)
-    vocsensor = VOCSensor(i2c)
-    display = Display(i2c)
+    tempsensor = TempSensor(board.I2C())
+    vocsensor = VOCSensor(board.I2C())
+    display = Display(board.I2C())
     kasaswitch = asyncioloop.run_until_complete(
-        Discover.discover_single(
-            host=configdata["kasa"]["host"],
-            username=configdata["kasa"]["username"],
-            password=configdata["kasa"]["password"],
-        )
+        Discover.discover_single(**configdata["kasa"])
     )
     asyncioloop.run_until_complete(kasaswitch.update())
     asyncioloop.run_until_complete(kasaswitch.turn_off())
-    shared.set("filter", 0)
+    client_cache.set("filter", 0)
 
     try:
         while True:
             tpreupdate = time()
+            update(datetime.datetime.now())
+            tpostupdate = time()
 
-            now = datetime.datetime.now()
-
-            update(now)
-            # tpostupdate = datetime.datetime.now()
-
-            dtime = 1.0 - (time() - tpreupdate)
+            dtime = 1.0 - (tpostupdate - tpreupdate)
             if dtime > 0:
                 sleep(dtime)
     except KeyboardInterrupt:
