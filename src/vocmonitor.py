@@ -1,6 +1,5 @@
 #!/home/jrallen/env/bin/python3
 
-import asyncio
 import datetime
 import os
 import sys
@@ -12,7 +11,6 @@ import adafruit_sht4x
 import adafruit_ssd1306
 import board
 from adafruit_sgp40.voc_algorithm import VOCAlgorithm
-from kasa import Discover
 from PIL import Image, ImageDraw, ImageFont
 from pymemcache import serde
 from pymemcache.client.base import Client
@@ -151,14 +149,14 @@ def update(now):
     display.writedata(tempc, rh, vocraw, vocindex)
 
     # Turn filter on if VOC high, only check every 5 seconds
-    if now.second % 5 == 0:
-        filteron = client_cache.get("filter")
-        if vocindex >= 150 and filteron == 0:
-            asyncioloop.run_until_complete(kasaswitch.turn_on())
-            client_cache.set("filter", 1)
-        elif vocindex < 150 and filteron == 1:
-            asyncioloop.run_until_complete(kasaswitch.turn_off())
-            client_cache.set("filter", 0)
+    #if now.second % 5 == 0:
+    #    filteron = client_cache.get("filter")
+    #    if vocindex >= 150 and filteron == 0:
+    #        asyncioloop.run_until_complete(kasaswitch.turn_on())
+    #        client_cache.set("filter", 1)
+    #    elif vocindex < 150 and filteron == 1:
+    #        asyncioloop.run_until_complete(kasaswitch.turn_off())
+    #        client_cache.set("filter", 0)
 
     # get cache data
     cachedata = client_cache.get_multi(bambu_fields + ["filter"])
@@ -193,21 +191,10 @@ if __name__ == "__main__":
     client_cache = Client(serde=serde.pickle_serde, **configdata["memcache"])
     bambu_fields = client_cache.get("bambu_fields")
 
-    try:
-        asyncioloop = asyncio.get_running_loop()
-    except RuntimeError:
-        asyncioloop = asyncio.new_event_loop()
-    asyncio.set_event_loop(asyncioloop)
-
     # initialize devices
     tempsensor = TempSensor(board.I2C())
     vocsensor = VOCSensor(board.I2C())
     display = Display(board.I2C())
-    kasaswitch = asyncioloop.run_until_complete(
-        Discover.discover_single(**configdata["kasa"])
-    )
-    asyncioloop.run_until_complete(kasaswitch.update())
-    asyncioloop.run_until_complete(kasaswitch.turn_off())
     client_cache.set("filter", 0)
 
     try:
@@ -225,8 +212,5 @@ if __name__ == "__main__":
         print("Shutting down...")
         print("SGP40: Turning heater off...")
         vocsensor.turn_heater_off()
-        print("Turning off Kasa switch")
-        asyncioloop.run_until_complete(kasaswitch.turn_off())
-        asyncioloop.run_until_complete(kasaswitch.disconnect())
         print("Display: Clearing")
         display.clear()
