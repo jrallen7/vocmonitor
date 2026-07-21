@@ -1,4 +1,4 @@
-#!/home/jrallen/adafruit/bin/python3
+#!/home/jrallen/env/bin/python3
 
 import argparse
 import datetime
@@ -70,6 +70,7 @@ if __name__ == "__main__":
 
     # initialize cache
     if args.flush:
+        print('Flushing memcache...')
         client_cache.flush_all()
     temp = client_cache.get_multi(bambu_fields)
     for f in bambu_fields:
