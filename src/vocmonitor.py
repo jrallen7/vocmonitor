@@ -91,8 +91,12 @@ class Display:
         print("Display: Initializing...", end="")
         self._disp = adafruit_ssd1306.SSD1306_I2C(128, 32, i2c)
         self._disp.contrast(1)
+        self._disp.write_cmd(0xDB)
+        self._disp.write_cmd(0x1)
+        self._disp.write_cmd(0xD9)
+        self._disp.write_cmd(1<<4|15)
         self.clear()
-        self._enabled = False
+        self._enabled = True
 
         self._image = Image.new("1", (self._disp.width, self._disp.height))
         self._draw = ImageDraw.Draw(self._image)
@@ -145,7 +149,7 @@ def update(now):
     vocraw, vocindex = vocsensor.measure(tempc, rh)
 
     # Display only on for 2 out of 10 seconds to prevent aging
-    display.enabled = now.second % 10 < 2
+    #display.enabled = now.second % 10 < 2
     display.writedata(tempc, rh, vocraw, vocindex)
 
     # Turn filter on if VOC high, only check every 5 seconds
