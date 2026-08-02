@@ -10,6 +10,7 @@ import adafruit_sgp40
 import adafruit_sht4x
 import adafruit_ssd1306
 import board
+import digitalio
 from adafruit_sgp40.voc_algorithm import VOCAlgorithm
 from PIL import Image, ImageDraw, ImageFont
 from pymemcache import serde
@@ -44,10 +45,12 @@ class VOCSensor:
         self._sgp = adafruit_sgp40.SGP40(i2c)
         self._vocalgorithm = VOCAlgorithm()
         self._vocalgorithm.vocalgorithm_init()
+
         # initial measurement just to get the sensor running
-        print("SGP40: Running 5 measurements")
+        print("SGP40: Running 5 init measurements")
         for i in range(5):
-            trash = self._sgp.measure_raw()
+            _ = self._sgp.measure_raw()
+
         # print('SGP40: Seeding Algorithm History')
         # self.seedhistory()
         print("SGP40: Done")
@@ -90,13 +93,16 @@ class Display:
     def __init__(self, i2c):
         print("Display: Initializing...", end="")
         self._disp = adafruit_ssd1306.SSD1306_I2C(128, 32, i2c)
-        self._disp.contrast(1)
+        self._enabled = True
+
+        # reduce display brightness
         self._disp.write_cmd(0xDB)
         self._disp.write_cmd(0x1)
         self._disp.write_cmd(0xD9)
         self._disp.write_cmd(1<<4|15)
+        self._disp.contrast(1)
+
         self.clear()
-        self._enabled = True
 
         self._image = Image.new("1", (self._disp.width, self._disp.height))
         self._draw = ImageDraw.Draw(self._image)
@@ -142,6 +148,31 @@ class Display:
             # Push image to display
             self._disp.image(self._image)
             self._disp.show()
+
+
+class FanControl:
+    def __init__(self):
+        self._pin = digitalio.DigitalInOut(board.D24)
+        self._pin.direction = digitalio.Direction.OUTPUT
+        self._pin = False
+        self._enabled = False
+
+    @property
+    def enabled(self):
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, en):
+        if self._enabled != en:
+            self._enabled = en
+            self._pin = self._enabled
+
+    def clear(self):
+        self._disp.fill(0)
+        self._disp.show()
+
+
+    def turnon
 
 
 def update(now):
