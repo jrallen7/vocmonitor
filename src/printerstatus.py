@@ -4,9 +4,9 @@ import argparse
 import datetime
 import os
 import sys
-import tomllib
 from time import sleep
 
+import tomllib
 from pymemcache import serde
 from pymemcache.client.base import Client
 
@@ -39,8 +39,8 @@ def callback_status(statusmsg):
     )
     if STATUSMSG_DUMP:
         with open("msgdump.txt", "at") as fdump:
-            fdump.write("{}".format(timestamp))
-            fdump.write("{}\n\n".format(statusmsg))
+            fdump.write(f"{timestamp}")
+            fdump.write(f"{statusmsg}\n\n")
 
 
 def callback_connect():
@@ -56,14 +56,14 @@ if __name__ == "__main__":
         configdata = tomllib.load(fconfig)
 
     bambu_fields = [
-        "nozzle_temper",  # current hotend temp
-        "nozzle_target_temper",  # target hotend temp
-        "bed_temper",  # current bed temp
-        "bed_target_temper",  # target bed temp
-        "mc_print_stage",  # print status
-        "mc_percent",  # print percent complete
-        "layer_num",  # current layer
-        "total_layer_num",  # total layers in current print
+        "nozzle_temper",        # current hotend temp
+        "nozzle_target_temper", # target hotend temp
+        "bed_temper",           # current bed temp
+        "bed_target_temper",    # target bed temp
+        "mc_print_stage",       # print status
+        "mc_percent",           # print percent complete
+        "layer_num",            # current layer
+        "total_layer_num",      # total layers in current print
     ]
 
     client_cache = Client(serde=serde.pickle_serde, **configdata["memcache"])

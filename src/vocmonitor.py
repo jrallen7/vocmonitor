@@ -24,8 +24,8 @@ class TempSensor:
         self._sht.reset()
 
         print(f"SHT41: Serial Number {hex(self._sht.serial_number)}")
-        print("SHT41: Initial measurement (one second, high heat)...", end="")
         self._sht.mode = adafruit_sht4x.Mode.HIGHHEAT_1S
+        print(f"SHT41: Initial measurement {adafruit_sht4x.Mode.string[self._sht.mode]}...", end="")
         tempc, rh = self.measure()
         print(f"Temp: {tempc:.1f} RH: {rh:.0f}")
 
@@ -79,7 +79,7 @@ class VOCSensor:
                         i = l.index("V")
                         vraw = int(l[i + 1])
                         if vraw != 0:
-                            vocindex = self._vocalgorithm.vocalgorithm_process(vraw)
+                            _ = self._vocalgorithm.vocalgorithm_process(vraw)
                             ii += 1
                             #                    print(ii)
                             if ii % 100 == 0:
@@ -166,13 +166,6 @@ class FanControl:
         if self._enabled != en:
             self._enabled = en
             self._pin = self._enabled
-
-    def clear(self):
-        self._disp.fill(0)
-        self._disp.show()
-
-
-    def turnon
 
 
 def update(now):
