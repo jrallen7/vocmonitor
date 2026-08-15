@@ -5,7 +5,9 @@ import os
 import sys
 import tomllib
 from time import sleep, time
+import sqlite3
 
+import argparse
 import adafruit_sgp40
 import adafruit_sht4x
 import adafruit_ssd1306
@@ -13,23 +15,22 @@ import board
 import digitalio
 from adafruit_sgp40.voc_algorithm import VOCAlgorithm
 from PIL import Image, ImageDraw, ImageFont
-#from pymemcache import serde
-#from pymemcache.client.base import Client
 
 
 class TempSensor:
-    def __init__(self, i2c):
+    def __init__(self, i2c, skipinit=True):
         print("SHT41: Initializing")
         self._sht = adafruit_sht4x.SHT4x(i2c)
         self.reset()
 
         print(f"SHT41: Serial Number {hex(self._sht.serial_number)}")
-        self._sht.mode = adafruit_sht4x.Mode.HIGHHEAT_1S
-        print(f"SHT41: Doing 5 heat pulses {adafruit_sht4x.Mode.string[self._sht.mode]}")
-        for _ in range(5):
-            tempc, rh = self.measure()
-            print(f"\tTemp: {tempc:.1f} RH: {rh:.0f}")
-            sleep(1)
+        if not skipinit:
+            self._sht.mode = adafruit_sht4x.Mode.HIGHHEAT_1S
+            print(f"SHT41: Doing 5 heat pulses {adafruit_sht4x.Mode.string[self._sht.mode]}")
+            for _ in range(5):
+                tempc, rh = self.measure()
+                print(f"\tTemp: {tempc:.1f} RH: {rh:.0f}")
+                sleep(1)
         self._sht.mode = adafruit_sht4x.Mode.NOHEAT_HIGHPRECISION
         print(f"SHT41: Measurement mode set to {adafruit_sht4x.Mode.string[self._sht.mode]}")
 
@@ -40,21 +41,18 @@ class TempSensor:
         self._sht.reset()
 
 class VOCSensor:
-    def __init__(self, i2cbus):
+    def __init__(self, i2cbus, skipinit=False):
         print("SGP40: Initializing")
         self._sgp = adafruit_sgp40.SGP40(i2cbus)
         self._vocalgorithm = VOCAlgorithm()
         self._vocalgorithm.vocalgorithm_init()
 
-        # initial measurement just to get the sensor running
-        print("SGP40: Running 5 init measurements")
-        for i in range(5):
-            _ = self._sgp.measure_raw()
-
-        # print('SGP40: Seeding Algorithm History')
-        # self.seedhistory()
+        if not skipinit:
+            # initial measurement just to get the sensor running
+            print("SGP40: Running 5 init measurements")
+            for i in range(5):
+                _ = self._sgp.measure_raw()
         print("SGP40: Done")
-
 
     def turn_heater_off(self):
         self._sgp._command_buffer[0] = 0x36
@@ -78,12 +76,13 @@ class Display:
         self._disp.write_cmd(0b0001)
         self._disp.write_cmd(0xD9)
         self._disp.write_cmd(0b0001<<4 | 0b1111)
-        self._disp.contrast(1)
+        self._disp.contrast(2)
 
         self._image = Image.new("1", (self._disp.width, self._disp.height))
         self._draw = ImageDraw.Draw(self._image)
         self._fonts = {12: ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 12),
-                       16: ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 16)}
+                       16: ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 16),
+                       14: ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 14)}
 
         self.clear()
         print()
@@ -162,67 +161,61 @@ def update(now):
     tempc, rh = tempsensor.measure()
     vocraw, vocindex = vocsensor.measure(tempc, rh)
 
-    # Display only on for 2 out of 10 seconds to prevent aging
-    #display.enabled = now.second % 10 < 2
-    #display.writedata(tempc, rh, vocraw, vocindex)
-
     # Turn filter on if VOC high, only check every 5 seconds
-    #if now.second % 5 == 0:
-    #    filteron = client_cache.get("filter")
-    #    if vocindex >= 150 and filteron == 0:
-    #        asyncioloop.run_until_complete(kasaswitch.turn_on())
-    #        client_cache.set("filter", 1)
-    #    elif vocindex < 150 and filteron == 1:
-    #        asyncioloop.run_until_complete(kasaswitch.turn_off())
-    #        client_cache.set("filter", 0)
+    if now.second % 5 == 0:
+        if vocindex >= 150 and not fan.enabled:
+            fan.enabled = True
+        elif vocindex < 140 and fan.enabled:
+            fan.enabled = False
 
-    # get cache data
-    #cachedata = client_cache.get_multi(bambu_fields + ["filter"])
-
-
-    #def add_text(self, xypos, text, fontsize):
     timedatestring = now.astimezone().isoformat(timespec="milliseconds")
     tempstring = f"T {tempc:.0f} RH {rh:.0f}"
     vocstring = f"V {vocraw} {vocindex}"
-    #filterstring = "F {filter}".format(**cachedata)
-    #printerstring = " ".join(
-    #    [
-    #        "P",
-    #        "{nozzle_temper:.1f} {nozzle_target_temper:.1f}",
-    #        "{bed_temper:.1f} {bed_target_temper:.1f}",
-    #        "{mc_print_stage} {mc_percent}",
-    #    ]
-    #).format(**cachedata)
+    filterstring = f"F {fan.enabled}"
 
     display.clear_buffer()
     display.add_text((0,0), tempstring,16)
     display.add_text((0,17), vocstring,16)
     display.update()
-    logstring = " ".join(
-        [timedatestring, tempstring, vocstring]
-    )
+
+    logstring = " ".join( [timedatestring, tempstring, vocstring, filterstring])
     print(logstring)
-    #with open(os.path.join(pathlogs, now.strftime("%Y-%m-%d.log")), "at") as fo:
-    #    fo.write(f"{logstring}\n")
+
+    dbcur.execute("INSERT INTO vocmonitor VALUES(?,?,?,?,?,?)",
+                  [timedatestring, tempc, rh, vocraw, vocindex, fan.enabled])
+    dbcon.commit()
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--initdb', action='store_true')
+    parser.add_argument('--skipinit', action='store_true')
+    args = parser.parse_args()
+
     pathroot = os.path.normpath(os.path.join(sys.path[0], ".."))
+    pathuser = os.path.expanduser('~')
 
     with open(os.path.join(pathroot, "config.toml"), "rb") as f:
         configdata = tomllib.load(f)
 
-    #client_cache = Client(serde=serde.pickle_serde, **configdata["memcache"])
-    #bambu_fields = client_cache.get("bambu_fields")
-
     # initialize devices
     i2cbus = board.I2C()
-    tempsensor = TempSensor(i2cbus)
-    vocsensor = VOCSensor(i2cbus)
+    tempsensor = TempSensor(i2cbus, args.skipinit)
+    vocsensor = VOCSensor(i2cbus, args.skipinit)
     display = Display(i2cbus)
-    #client_cache.set("filter", 0)
 
     fan = FanControl()
+
+    print('Connecting to database...',end='')
+    dbcon = sqlite3.connect(os.path.join(pathuser, 'test.db'))
+    dbcur = dbcon.cursor() 
+
+    if args.initdb:
+        print('Reinitializing VOC table')
+        dbcur.execute("DROP TABLE IF EXISTS vocmonitor")
+        dbcur.execute("CREATE TABLE vocmonitor(time TEXT, temp REAL, rh REAL, vocraw INTEGER, vocindex INTEGER, filter INTEGER)")
+    else:
+        print()
 
     try:
         while True:
@@ -237,10 +230,15 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         pass
     finally:
+        print("\nShutting down...")
+        print("Closing database")
+        dbcon.commit()
+        dbcon.close()
+        print("Turning Fan Off")
+        fan.enabled = False
         while not i2cbus.try_lock():
             pass
         i2cbus.unlock()
-        print("\nShutting down...")
         tempsensor.reset()
         print("SGP40: Turning heater off...")
         vocsensor.turn_heater_off()
