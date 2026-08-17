@@ -7,8 +7,8 @@ import sys
 from time import sleep
 
 import tomllib
-from pymemcache import serde
-from pymemcache.client.base import Client
+#from pymemcache import serde
+#from pymemcache.client.base import Client
 
 # need to have the latest version of bambu-connect from github;
 # the pip version doesn't have the latest bug fixes
@@ -66,13 +66,13 @@ if __name__ == "__main__":
         "total_layer_num",      # total layers in current print
     ]
 
-    client_cache = Client(serde=serde.pickle_serde, **configdata["memcache"])
+    #client_cache = Client(serde=serde.pickle_serde, **configdata["memcache"])
 
     # initialize cache
     if args.flush:
         print('Flushing memcache...')
-        client_cache.flush_all()
-    temp = client_cache.get_multi(bambu_fields)
+    #    client_cache.flush_all()
+    #temp = client_cache.get_multi(bambu_fields)
     for f in bambu_fields:
         if f not in temp:
             client_cache.set(f, 0)

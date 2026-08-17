@@ -26,19 +26,24 @@ class TempSensor:
         print(f"SHT41: Serial Number {hex(self._sht.serial_number)}")
         if not skipinit:
             self._sht.mode = adafruit_sht4x.Mode.HIGHHEAT_1S
-            print(f"SHT41: Doing 5 heat pulses {adafruit_sht4x.Mode.string[self._sht.mode]}")
+            print(
+                f"SHT41: Doing 5 heat pulses {adafruit_sht4x.Mode.string[self._sht.mode]}"
+            )
             for _ in range(5):
                 tempc, rh = self.measure()
                 print(f"\tTemp: {tempc:.1f} RH: {rh:.0f}")
                 sleep(1)
         self._sht.mode = adafruit_sht4x.Mode.NOHEAT_HIGHPRECISION
-        print(f"SHT41: Measurement mode set to {adafruit_sht4x.Mode.string[self._sht.mode]}")
+        print(
+            f"SHT41: Measurement mode set to {adafruit_sht4x.Mode.string[self._sht.mode]}"
+        )
 
     def measure(self):
         return self._sht.measurements
 
     def reset(self):
         self._sht.reset()
+
 
 class VOCSensor:
     def __init__(self, i2cbus, skipinit=False):
@@ -75,19 +80,25 @@ class Display:
         self._disp.write_cmd(0xDB)
         self._disp.write_cmd(0b0001)
         self._disp.write_cmd(0xD9)
-        self._disp.write_cmd(0b0001<<4 | 0b1111)
+        self._disp.write_cmd(0b0001 << 4 | 0b1111)
         self._disp.contrast(2)
 
         self._image = Image.new("1", (self._disp.width, self._disp.height))
         self._draw = ImageDraw.Draw(self._image)
-        self._fonts = {12: ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 12),
-                       16: ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 16),
-                       14: ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 14)}
+        self._fonts = {
+            12: ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 12
+            ),
+            16: ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 16
+            ),
+            14: ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 14
+            ),
+        }
 
         self.clear()
         print()
-
-    # def __del__(self):
 
     @property
     def enabled(self):
@@ -101,7 +112,9 @@ class Display:
                 self.clear()
 
     def clear_buffer(self):
-        self._draw.rectangle( (0, 0, self._disp.width, self._disp.height), outline=0, fill=0)
+        self._draw.rectangle(
+            (0, 0, self._disp.width, self._disp.height), outline=0, fill=0
+        )
 
     def update(self):
         self._disp.image(self._image)
@@ -114,24 +127,6 @@ class Display:
     def add_text(self, xypos, text, fontsize):
         self._draw.text(xypos, text, font=self._fonts[fontsize], fill=255)
 
-#    def writedata(self, tempc, rh, vocraw, vocindex):
-#        if self._enabled:
-#            # Generate blank rectangle image
-#            self._draw.rectangle(
-#                (0, 0, self._disp.width, self._disp.height), outline=0, fill=0
-#            )
-
-            # Add text
-#            self._draw.text((0, 1), f"T {tempc:.0f}C", font=self._font1, fill=255)
-#            self._draw.text((80, 1), f"RH {rh:.0f}", font=self._font1, fill=255)
-#            self._draw.text(
-#                (0, 17), f"VOC {vocraw:5d} {vocindex:3d}", font=self._font2, fill=255
-#            )
-
-            # Push image to display
-#            self._disp.image(self._image)
-#            self._disp.show()
-
 
 class FanControl:
     def __init__(self):
@@ -140,7 +135,7 @@ class FanControl:
         self._pin.value = False
         self._enabled = False
 
-        print('Fan Init:')
+        print("Fan Init:")
         self.enabled = True
         sleep(1)
         self.enabled = False
@@ -152,7 +147,7 @@ class FanControl:
     @enabled.setter
     def enabled(self, en):
         if self._enabled != en:
-            print(f'Changing Fan State: {en}')
+            print(f"Changing Fan State: {en}")
             self._enabled = en
             self._pin.value = self._enabled
 
@@ -174,26 +169,28 @@ def update(now):
     filterstring = f"F {fan.enabled}"
 
     display.clear_buffer()
-    display.add_text((0,0), tempstring,16)
-    display.add_text((0,17), vocstring,16)
+    display.add_text((0, 0), tempstring, 16)
+    display.add_text((0, 17), vocstring, 16)
     display.update()
 
-    logstring = " ".join( [timedatestring, tempstring, vocstring, filterstring])
+    logstring = " ".join([timedatestring, tempstring, vocstring, filterstring])
     print(logstring)
 
-    dbcur.execute("INSERT INTO vocmonitor VALUES(?,?,?,?,?,?)",
-                  [timedatestring, tempc, rh, vocraw, vocindex, fan.enabled])
+    dbcur.execute(
+        "INSERT INTO vocmonitor VALUES(?,?,?,?,?,?)",
+        [timedatestring, tempc, rh, vocraw, vocindex, fan.enabled],
+    )
     dbcon.commit()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--initdb', action='store_true')
-    parser.add_argument('--skipinit', action='store_true')
+    parser.add_argument("--initdb", action="store_true")
+    parser.add_argument("--skipinit", action="store_true")
     args = parser.parse_args()
 
     pathroot = os.path.normpath(os.path.join(sys.path[0], ".."))
-    pathuser = os.path.expanduser('~')
+    pathuser = os.path.expanduser("~")
 
     with open(os.path.join(pathroot, "config.toml"), "rb") as f:
         configdata = tomllib.load(f)
@@ -206,14 +203,16 @@ if __name__ == "__main__":
 
     fan = FanControl()
 
-    print('Connecting to database...',end='')
-    dbcon = sqlite3.connect(os.path.join(pathuser, 'test.db'))
-    dbcur = dbcon.cursor() 
+    print("Connecting to database...", end="")
+    dbcon = sqlite3.connect(os.path.join(pathuser, "test.db"))
+    dbcur = dbcon.cursor()
 
     if args.initdb:
-        print('Reinitializing VOC table')
+        print("Reinitializing VOC table")
         dbcur.execute("DROP TABLE IF EXISTS vocmonitor")
-        dbcur.execute("CREATE TABLE vocmonitor(time TEXT, temp REAL, rh REAL, vocraw INTEGER, vocindex INTEGER, filter INTEGER)")
+        dbcur.execute(
+            "CREATE TABLE vocmonitor(time TEXT, temp REAL, rh REAL, vocraw INTEGER, vocindex INTEGER, filter INTEGER)"
+        )
     else:
         print()
 
@@ -223,8 +222,8 @@ if __name__ == "__main__":
             update(datetime.datetime.now())
             tpostupdate = time()
 
-            dtime = 1.0 - .0002 - (tpostupdate - tpreupdate)
-            print(f'{dtime:0.3f}')
+            dtime = 1.0 - 0.0002 - (tpostupdate - tpreupdate)
+            print(f"{dtime:0.3f}")
             if dtime > 0:
                 sleep(dtime)
     except KeyboardInterrupt:
