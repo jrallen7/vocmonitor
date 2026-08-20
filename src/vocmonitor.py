@@ -1,19 +1,20 @@
 #!/home/jrallen/env/bin/python3
 
 import datetime
+from zoneinfo import ZoneInfo
 import os
 import sys
 import tomllib
 from time import sleep, time
 import sqlite3
-
+from sensirion_gas_index_algorithm.voc_algorithm import VocAlgorithm
 import argparse
 import adafruit_sgp40
 import adafruit_sht4x
 import adafruit_ssd1306
 import board
 import digitalio
-from adafruit_sgp40.voc_algorithm import VOCAlgorithm
+#from adafruit_sgp40.voc_algorithm import VOCAlgorithm
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -49,8 +50,8 @@ class VOCSensor:
     def __init__(self, i2cbus, skipinit=False):
         print("SGP40: Initializing")
         self._sgp = adafruit_sgp40.SGP40(i2cbus)
-        self._vocalgorithm = VOCAlgorithm()
-        self._vocalgorithm.vocalgorithm_init()
+        self._vocalgorithm = VocAlgorithm()
+        #self._vocalgorithm.vocalgorithm_init()
 
         if not skipinit:
             # initial measurement just to get the sensor running
@@ -66,8 +67,14 @@ class VOCSensor:
 
     def measure(self, tempc=25.0, rh=50.0):
         vocraw = self._sgp.measure_raw(temperature=tempc, relative_humidity=rh)
-        vocindex = self._vocalgorithm.vocalgorithm_process(vocraw)
-        return vocraw, vocindex
+        vocindex = self._vocalgorithm.process(vocraw)
+        state0, state1 = self._vocalgorithm.get_states()
+        return vocraw, vocindex, state0, state1
+
+    def setalgostate(self, state0, state1):
+        print('Loading last VOC state')
+        self._vocalgorithm.set_states(state0, state1)
+
 
 
 class Display:
@@ -154,7 +161,7 @@ class FanControl:
 
 def update(now):
     tempc, rh = tempsensor.measure()
-    vocraw, vocindex = vocsensor.measure(tempc, rh)
+    vocraw, vocindex, vocstatemean, vocstatestd = vocsensor.measure(tempc, rh)
 
     # Turn filter on if VOC high, only check every 5 seconds
     if now.second % 5 == 0:
@@ -163,9 +170,9 @@ def update(now):
         elif vocindex < 140 and fan.enabled:
             fan.enabled = False
 
-    timedatestring = now.astimezone().isoformat(timespec="milliseconds")
+    timedatestring = now.isoformat(timespec="milliseconds")
     tempstring = f"T {tempc:.0f} RH {rh:.0f}"
-    vocstring = f"V {vocraw} {vocindex}"
+    vocstring = f"V {vocraw} {vocindex} {vocstatemean} {vocstatestd}"
     filterstring = f"F {fan.enabled}"
 
     display.clear_buffer()
@@ -177,8 +184,8 @@ def update(now):
     print(logstring)
 
     dbcur.execute(
-        "INSERT INTO vocmonitor VALUES(?,?,?,?,?,?)",
-        [timedatestring, tempc, rh, vocraw, vocindex, fan.enabled],
+        "INSERT INTO vocmonitor VALUES(?,?,?,?,?,?,?,?)",
+        [now.timestamp(), tempc, rh, vocraw, vocindex, vocstatemean, vocstatestd, fan.enabled],
     )
     dbcon.commit()
 
@@ -203,23 +210,37 @@ if __name__ == "__main__":
 
     fan = FanControl()
 
+    timestamp_start = time()
+
     print("Connecting to database...", end="")
-    dbcon = sqlite3.connect(os.path.join(pathuser, "test.db"))
+    dbcon = sqlite3.connect(os.path.join("/mnt/bambu.db"))
     dbcur = dbcon.cursor()
 
     if args.initdb:
         print("Reinitializing VOC table")
         dbcur.execute("DROP TABLE IF EXISTS vocmonitor")
         dbcur.execute(
-            "CREATE TABLE vocmonitor(time TEXT, temp REAL, rh REAL, vocraw INTEGER, vocindex INTEGER, filter INTEGER)"
+            "CREATE TABLE vocmonitor(timestamp REAL, temp REAL, rh REAL, vocraw INTEGER, vocindex INTEGER, vocstatemean INTEGER, vocstatestd INTEGER, filter INTEGER)"
         )
+
+        vocstate = None
     else:
+        timestamp_lastvocstate, vocstatemean, vocstatestd = dbcur.execute("SELECT timestamp,vocstatemean,vocstatestd FROM vocmonitor ORDER BY timestamp DESC LIMIT 1").fetchone()
         print()
+        foo = (timestamp_start - timestamp_lastvocstate)/60
+        print('Last VOC state {:.1f} min ago'.format(foo))
+        if foo < 10:
+            print('Loading state from database')
+            vocstate = (vocstatemean, vocstatestd)
+            vocsensor.setalgostate(vocstatemean, vocstatestd)
+        else:
+            print('VOC Algorithm starting fresh')
+
 
     try:
         while True:
             tpreupdate = time()
-            update(datetime.datetime.now())
+            update(datetime.datetime.now(tz=ZoneInfo('America/Chicago')))
             tpostupdate = time()
 
             dtime = 1.0 - 0.0002 - (tpostupdate - tpreupdate)
