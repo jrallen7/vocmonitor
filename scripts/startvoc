@@ -1,3 +1,2 @@
 #!/usr/bin/bash
-
 screen -dmS voc sh -c '/home/jrallen/vocmonitor/src/vocmonitor.py; exec bash'
