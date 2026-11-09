@@ -213,7 +213,7 @@ if __name__ == "__main__":
     timestamp_start = time()
 
     print("Connecting to database...", end="")
-    dbcon = sqlite3.connect(os.path.join("/mnt/bambu.db"))
+    dbcon = sqlite3.connect(os.path.join("/home/jrallen/bambu.db"))
     dbcur = dbcon.cursor()
 
     if args.initdb:
@@ -251,6 +251,11 @@ if __name__ == "__main__":
         pass
     finally:
         print("\nShutting down...")
+        print("Pruning database...")
+        dbcur.execute('DELETE FROM vocmonitor WHERE timestamp < (unixepoch()-30*24*60*60)')
+        dbcon.commit()
+        dbcur.execute('VACUUM')
+        dbcur.execute('ANALYZE')
         print("Closing database")
         dbcon.commit()
         dbcon.close()
